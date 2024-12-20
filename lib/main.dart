@@ -59,7 +59,7 @@ class _MyHomePageState extends State<MyHomePage>
   List<dynamic> _jokes = [];
   bool _isLoading = false;
   bool _isOffline = false;
-  bool _usingCachedData = false; // Tracks cached data usage while online
+  bool _usingCachedData = false;
   late AnimationController _animationController;
   late Animation<double> _animation;
 
@@ -104,11 +104,11 @@ class _MyHomePageState extends State<MyHomePage>
       });
     } catch (error) {
       final cachedJokes = await widget.jokeService.getCachedJokes();
-      if (cachedJokes != null) {
+      if (cachedJokes != null && cachedJokes.isNotEmpty) {
         setState(() {
           _jokes = cachedJokes.take(5).toList();
-          _isOffline = false; // Online but using cached data
-          _usingCachedData = true; // Mark as using cached data
+          _isOffline = false;
+          _usingCachedData = true;
         });
       }
 
@@ -117,10 +117,10 @@ class _MyHomePageState extends State<MyHomePage>
           content: Text(
             _usingCachedData
                 ? 'Online, but using cached jokes! 📱'
-                : 'Oops! Jokes took a coffee break. $error',
+                : 'Oops! Jokes took a coffee break. Try to go Online! ☕',
             style: TextStyle(
               fontFamily: GoogleFonts.rubik().fontFamily,
-              color: Colors.white,
+              color: const Color.fromRGBO(255, 255, 255, 0.9),
             ),
           ),
           backgroundColor:
@@ -270,7 +270,7 @@ class _MyHomePageState extends State<MyHomePage>
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : fetchJokes,
+                  onPressed: (_isLoading && !_isOffline) ? null : fetchJokes,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     backgroundColor: Colors.transparent,
@@ -297,7 +297,7 @@ class _MyHomePageState extends State<MyHomePage>
                       child: _isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : Text(
-                              _isOffline ? 'Offline Jokes' : 'Unleash Humor',
+                              _isOffline ? 'Try Online Jokes' : 'Unleash Humor',
                               style: TextStyle(
                                 fontFamily: GoogleFonts.rubik().fontFamily,
                                 color: Colors.white,

@@ -17,7 +17,7 @@ class JokeService {
     return JokeService(prefs);
   }
 
-  Future<List<dynamic>> fetchJokes() async {
+  Future fetchJokes() async {
     try {
       // Try to fetch from network first
       final response = await _dio.get(
@@ -34,12 +34,14 @@ class JokeService {
     } catch (e) {
       // If network request fails, try to load cached jokes
       final cachedJokes = await getCachedJokes();
-      if (cachedJokes != null) {
+      if (cachedJokes != null && cachedJokes.isNotEmpty) {
         return cachedJokes;
       }
 
-      // If no cached jokes available, rethrow the error
-      throw Exception('Error fetching jokes and no cached jokes available: $e');
+      // If no cached jokes available, return an empty list or throw
+      throw Exception(
+        'Error fetching jokes: $e. No cached jokes available.',
+      );
     }
   }
 
@@ -52,18 +54,29 @@ class JokeService {
   }
 
   Future<List<dynamic>?> getCachedJokes() async {
-    final cachedData = _prefs.getString(_cacheKey);
-    if (cachedData != null) {
-      final decodedData = jsonDecode(cachedData);
-      final cacheTimestamp =
-          DateTime.fromMillisecondsSinceEpoch(decodedData['timestamp']);
+    try {
+      final cachedData = _prefs.getString(_cacheKey);
+      if (cachedData != null) {
+        final decodedData = jsonDecode(cachedData);
+        final cacheTimestamp =
+            DateTime.fromMillisecondsSinceEpoch(decodedData['timestamp']);
 
-      // Check if cache is still valid
-      if (DateTime.now().difference(cacheTimestamp) < _cacheExpiration) {
-        return decodedData['jokes'];
+        // Check if cache is still valid
+        if (DateTime.now().difference(cacheTimestamp) < _cacheExpiration) {
+          return decodedData['jokes'];
+        } else {
+          // If cache is expired, clear it
+          await clearCache();
+          throw Exception('Cache expired');
+        }
+      } else {
+        throw Exception('No cached data available');
       }
+    } catch (e) {
+      // Handle and log the error
+      print('Error fetching cached jokes: $e');
+      return [];
     }
-    return null;
   }
 
   Future<void> clearCache() async {
