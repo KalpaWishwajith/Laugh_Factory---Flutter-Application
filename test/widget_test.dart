@@ -13,7 +13,7 @@ import 'package:laugh_factory/main.dart';
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const JokesApp());
+    await tester.pumpWidget(const LaughFactory());
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);

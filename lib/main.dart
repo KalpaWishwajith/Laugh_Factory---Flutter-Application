@@ -4,13 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'joke_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const JokesApp());
+  final jokeService = await JokeService.create();
+  runApp(LaughFactory(jokeService: jokeService));
 }
 
-class JokesApp extends StatelessWidget {
-  const JokesApp({super.key});
+class LaughFactory extends StatelessWidget {
+  final JokeService jokeService;
+
+  const LaughFactory({super.key, required this.jokeService});
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +25,6 @@ class JokesApp extends StatelessWidget {
           seedColor: const Color(0xFF6A5ACD),
           brightness: Brightness.light,
         ),
-        // Use a more robust text theme approach
         textTheme: TextTheme(
           displayLarge: TextStyle(
             fontFamily: GoogleFonts.rubik().fontFamily,
@@ -38,13 +40,15 @@ class JokesApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const MyHomePage(),
+      home: MyHomePage(jokeService: jokeService),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
+  final JokeService jokeService;
+
+  const MyHomePage({super.key, required this.jokeService});
 
   @override
   _MyHomePageState createState() => _MyHomePageState();
@@ -52,9 +56,9 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage>
     with SingleTickerProviderStateMixin {
-  final JokeService _jokeService = JokeService();
   List<dynamic> _jokes = [];
   bool _isLoading = false;
+  bool _isOffline = false;
   late AnimationController _animationController;
   late Animation<double> _animation;
 
@@ -69,6 +73,18 @@ class _MyHomePageState extends State<MyHomePage>
       parent: _animationController,
       curve: Curves.easeOutQuart,
     );
+    _loadCachedJokes();
+  }
+
+  Future<void> _loadCachedJokes() async {
+    final cachedJokes = await widget.jokeService.getCachedJokes();
+    if (cachedJokes != null) {
+      setState(() {
+        _jokes = cachedJokes.take(5).toList();
+        _isOffline = true;
+        _animationController.forward();
+      });
+    }
   }
 
   @override
@@ -80,27 +96,37 @@ class _MyHomePageState extends State<MyHomePage>
   Future<void> fetchJokes() async {
     setState(() {
       _isLoading = true;
+      _isOffline = false;
     });
 
     try {
-      final jokes = await _jokeService.fetchJokes();
+      final jokes = await widget.jokeService.fetchJokes();
       setState(() {
         _jokes = jokes.take(5).toList();
         _animationController.reset();
         _animationController.forward();
       });
     } catch (error) {
-      // Improved error handling
+      final cachedJokes = await widget.jokeService.getCachedJokes();
+      if (cachedJokes != null) {
+        setState(() {
+          _jokes = cachedJokes.take(5).toList();
+          _isOffline = true;
+        });
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Oops! Jokes took a coffee break. $error',
+            _isOffline
+                ? 'You\'re offline. Showing cached jokes! 📱'
+                : 'Oops! Jokes took a coffee break. $error',
             style: TextStyle(
               fontFamily: GoogleFonts.rubik().fontFamily,
               color: Colors.white,
             ),
           ),
-          backgroundColor: Colors.deepPurpleAccent,
+          backgroundColor: _isOffline ? Colors.orange : Colors.deepPurpleAccent,
         ),
       );
     } finally {
@@ -127,6 +153,16 @@ class _MyHomePageState extends State<MyHomePage>
             color: Colors.white,
           ),
         ),
+        actions: [
+          if (_isOffline)
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Icon(
+                Icons.offline_bolt,
+                color: Colors.orange[300],
+              ),
+            ),
+        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -199,7 +235,7 @@ class _MyHomePageState extends State<MyHomePage>
                                     padding: const EdgeInsets.all(20),
                                     child: Text(
                                       joke['setup'] != null
-                                          ? '${joke['setup']} 🤔\n${joke['delivery']} 😂'
+                                          ? '${joke['setup']} \n${joke['delivery']} 😂'
                                           : joke['joke'] ?? 'No joke found',
                                       style: TextStyle(
                                         fontFamily:
@@ -248,7 +284,7 @@ class _MyHomePageState extends State<MyHomePage>
                       child: _isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : Text(
-                              'Unleash Humor',
+                              _isOffline ? 'Try Online Jokes' : 'Unleash Humor',
                               style: TextStyle(
                                 fontFamily: GoogleFonts.rubik().fontFamily,
                                 color: Colors.white,
