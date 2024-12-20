@@ -59,6 +59,7 @@ class _MyHomePageState extends State<MyHomePage>
   List<dynamic> _jokes = [];
   bool _isLoading = false;
   bool _isOffline = false;
+  bool _usingCachedData = false; // Tracks cached data usage while online
   late AnimationController _animationController;
   late Animation<double> _animation;
 
@@ -80,23 +81,18 @@ class _MyHomePageState extends State<MyHomePage>
     final cachedJokes = await widget.jokeService.getCachedJokes();
     if (cachedJokes != null) {
       setState(() {
-        _jokes = cachedJokes.take(5).toList();
+        _jokes = cachedJokes;
         _isOffline = true;
         _animationController.forward();
       });
     }
   }
 
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
   Future<void> fetchJokes() async {
     setState(() {
       _isLoading = true;
       _isOffline = false;
+      _usingCachedData = false;
     });
 
     try {
@@ -111,22 +107,24 @@ class _MyHomePageState extends State<MyHomePage>
       if (cachedJokes != null) {
         setState(() {
           _jokes = cachedJokes.take(5).toList();
-          _isOffline = true;
+          _isOffline = false; // Online but using cached data
+          _usingCachedData = true; // Mark as using cached data
         });
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _isOffline
-                ? 'You\'re offline. Showing cached jokes! 📱'
+            _usingCachedData
+                ? 'Online, but using cached jokes! 📱'
                 : 'Oops! Jokes took a coffee break. $error',
             style: TextStyle(
               fontFamily: GoogleFonts.rubik().fontFamily,
               color: Colors.white,
             ),
           ),
-          backgroundColor: _isOffline ? Colors.orange : Colors.deepPurpleAccent,
+          backgroundColor:
+              _usingCachedData ? Colors.orange : Colors.deepPurpleAccent,
         ),
       );
     } finally {
@@ -134,6 +132,12 @@ class _MyHomePageState extends State<MyHomePage>
         _isLoading = false;
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   @override
@@ -154,6 +158,15 @@ class _MyHomePageState extends State<MyHomePage>
           ),
         ),
         actions: [
+          if (_usingCachedData)
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Icon(
+                Icons.cached,
+                color: Colors.orange[300],
+                semanticLabel: 'Using Cached Data',
+              ),
+            ),
           if (_isOffline)
             Padding(
               padding: const EdgeInsets.only(right: 16.0),
@@ -284,7 +297,7 @@ class _MyHomePageState extends State<MyHomePage>
                       child: _isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : Text(
-                              _isOffline ? 'Try Online Jokes' : 'Unleash Humor',
+                              _isOffline ? 'Offline Jokes' : 'Unleash Humor',
                               style: TextStyle(
                                 fontFamily: GoogleFonts.rubik().fontFamily,
                                 color: Colors.white,
