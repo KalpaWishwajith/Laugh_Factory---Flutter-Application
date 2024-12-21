@@ -1,125 +1,318 @@
-import 'package:flutter/material.dart';
+// ignore_for_file: library_private_types_in_public_api, use_build_context_synchronously
 
-void main() {
-  runApp(const MyApp());
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'joke_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final jokeService = await JokeService.create();
+  runApp(LaughFactory(jokeService: jokeService));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class LaughFactory extends StatelessWidget {
+  final JokeService jokeService;
 
-  // This widget is the root of your application.
+  const LaughFactory({super.key, required this.jokeService});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      debugShowCheckedModeBanner: false,
+      title: 'Laugh Factory',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6A5ACD),
+          brightness: Brightness.light,
+        ),
+        textTheme: TextTheme(
+          displayLarge: TextStyle(
+            fontFamily: GoogleFonts.rubik().fontFamily,
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          bodyLarge: TextStyle(
+            fontFamily: GoogleFonts.rubik().fontFamily,
+            fontSize: 16,
+            color: Colors.white,
+          ),
+        ),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: MyHomePage(jokeService: jokeService),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  final JokeService jokeService;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  const MyHomePage({super.key, required this.jokeService});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  _MyHomePageState createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _MyHomePageState extends State<MyHomePage>
+    with SingleTickerProviderStateMixin {
+  List<dynamic> _jokes = [];
+  bool _isLoading = false;
+  bool _isOffline = false;
+  bool _usingCachedData = false;
+  late AnimationController _animationController;
+  late Animation<double> _animation;
 
-  void _incrementCounter() {
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _animation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutQuart,
+    );
+    _loadCachedJokes();
+  }
+
+  Future<void> _loadCachedJokes() async {
+    final cachedJokes = await widget.jokeService.getCachedJokes();
+    if (cachedJokes != null) {
+      setState(() {
+        _jokes = cachedJokes;
+        _isOffline = true;
+        _animationController.forward();
+      });
+    }
+  }
+
+  Future<void> fetchJokes() async {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _isLoading = true;
+      _isOffline = false;
+      _usingCachedData = false;
     });
+
+    try {
+      final jokes = await widget.jokeService.fetchJokes();
+      setState(() {
+        _jokes = jokes.take(5).toList();
+        _animationController.reset();
+        _animationController.forward();
+      });
+    } catch (error) {
+      final cachedJokes = await widget.jokeService.getCachedJokes();
+      if (cachedJokes != null && cachedJokes.isNotEmpty) {
+        setState(() {
+          _jokes = cachedJokes.take(5).toList();
+          _isOffline = false;
+          _usingCachedData = true;
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _usingCachedData
+                ? 'Online, but using cached jokes! 📱'
+                : 'Oops! Jokes took a coffee break. Try to go Online! ☕',
+            style: TextStyle(
+              fontFamily: GoogleFonts.rubik().fontFamily,
+              color: const Color.fromRGBO(255, 255, 255, 0.9),
+            ),
+          ),
+          backgroundColor:
+              _usingCachedData ? Colors.orange : Colors.deepPurpleAccent,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        title: Text(
+          'Laugh Factory',
+          style: TextStyle(
+            fontFamily: GoogleFonts.rubik().fontFamily,
+            fontWeight: FontWeight.w800,
+            fontSize: 28,
+            color: Colors.white,
+          ),
+        ),
+        actions: [
+          if (_usingCachedData)
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Icon(
+                Icons.cached,
+                color: Colors.orange[300],
+                semanticLabel: 'Using Cached Data',
+              ),
+            ),
+          if (_isOffline)
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: Icon(
+                Icons.offline_bolt,
+                color: Colors.orange[300],
+              ),
+            ),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF6A5ACD), Color(0xFF4B0082)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  'Daily Dose of Humor',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: GoogleFonts.rubik().fontFamily,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: _jokes.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Ready to Laugh? 😄',
+                          style: TextStyle(
+                            fontFamily: GoogleFonts.rubik().fontFamily,
+                            color: Colors.white70,
+                            fontSize: 22,
+                          ),
+                        ),
+                      )
+                    : ScaleTransition(
+                        scale: _animation,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _jokes.length,
+                          itemBuilder: (context, index) {
+                            final joke = _jokes[index];
+                            return FadeTransition(
+                              opacity: _animation,
+                              child: Card(
+                                elevation: 10,
+                                margin: const EdgeInsets.symmetric(
+                                    vertical: 10, horizontal: 5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.deepPurpleAccent,
+                                        Colors.purpleAccent
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(20),
+                                    child: Text(
+                                      joke['setup'] != null
+                                          ? '${joke['setup']} \n${joke['delivery']} 😂'
+                                          : joke['joke'] ?? 'No joke found',
+                                      style: TextStyle(
+                                        fontFamily:
+                                            GoogleFonts.rubik().fontFamily,
+                                        fontSize: 20,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: ElevatedButton(
+                  onPressed: (_isLoading && !_isOffline) ? null : fetchJokes,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    elevation: 10,
+                  ),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Colors.deepPurple, Colors.purpleAccent],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Container(
+                      constraints: const BoxConstraints(
+                        minWidth: double.infinity,
+                        minHeight: 60,
+                      ),
+                      alignment: Alignment.center,
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text(
+                              _isOffline ? 'Try Online Jokes' : 'Unleash Humor',
+                              style: TextStyle(
+                                fontFamily: GoogleFonts.rubik().fontFamily,
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
